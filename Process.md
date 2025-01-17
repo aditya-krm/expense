@@ -110,3 +110,81 @@ Custom SVG icons with consistent styling
 - Clear visual feedback for interactive elements
 
 The screens are now ready to use. You can navigate between them using the links provided. Would you like me to make any adjustments to the design or add any additional features?
+
+3. #Profile Screen:
+   I've created a beautiful profile page with a dark glassmorphism style using minimal external dependencies. Here's what I've implemented:
+
+## Dark Gradient Background:
+
+Using LinearGradient from expo-linear-gradient (already installed) for the black to dark purple background.
+
+## Profile Header:
+
+- Animated glowing avatar with gradient border
+- User's name in large, bold text
+- Profession displayed below in a softer color
+
+## Profile Details:
+
+Glassmorphic cards with translucent backgrounds
+Icons for email, phone, and member since date
+Clean layout with proper spacing and typography
+
+## Interactive Elements:
+
+- Gradient "Edit Profile" button with a teal-to-green gradient
+- "Log Out" button with a red gradient and icon
+- Subtle hover states through opacity changes
+
+## Animations:
+
+- Subtle glow animation on the avatar border using Animated
+- Smooth transitions and interactions
+
+The design uses minimal dependencies, relying mainly on:
+
+- React Native's built-in components
+- Expo's LinearGradient (already installed)
+- Ionicons for icons (part of @expo/vector-icons)
+
+The UI follows modern design principles with:
+
+- Proper spacing and hierarchy
+- Consistent color scheme
+- Glassmorphism effects through translucent backgrounds
+  Gradient accents for visual interest
+
+#### update:
+
+I've enhanced the profile page with several new components and features while maintaining the dark glassmorphism style and using the theme colors. Here are the key additions:
+
+## Stats Section:
+
+- Added a row of stat cards showing total transactions, total saved amount, and monthly average expense
+- Each stat card has a glassmorphic background with the theme's highlight color for values
+
+## Section Headers:
+
+- Added clear section headers with icons for better organization
+- "Profile Information" and "Settings" sections with themed icons
+
+## Preferences Section:
+
+- Added a new preferences section with toggle switches
+- Includes notification and dark mode toggles
+- Currency preference display
+- Beautiful glassmorphic container with subtle borders
+
+## Styling Improvements:
+
+- Using theme colors consistently throughout the UI
+- Added ScrollView for better content management
+- Improved spacing and typography
+- Enhanced glassmorphism effects using theme's glass color
+
+## Mock Data:
+
+- Extended the mock data to include stats and preferences
+- Added proper currency formatting for monetary values
+
+The profile page now provides much more information about the user while maintaining a clean, modern, and cohesive design that matches your app's theme. The glassmorphism effects create depth and visual interest, while the color scheme ensures good readability and visual hierarchy.

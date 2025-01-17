@@ -14,13 +14,19 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import theme from "../styles/theme";
 import { Link } from "expo-router";
 import { BlurView } from "expo-blur";
+import * as z from "zod";
 
 import useAuth from "../context/GlobalProvider";
 import { useState } from "react";
-import { InputField } from "../components/ui/input-field";
+import InputField from "../components/ui/input-field";
 import ICONS from "../constants/icons";
 
-function SocialButton({ icon }: { icon: string }) {
+const loginSchema = z.object({
+  key: z.string().min(1, { message: "Email or phone is required" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+});
+
+function SocialButton({ icon }: { icon: keyof typeof ICONS }) {
   return (
     <Pressable
       style={styles.socialButton}
@@ -29,7 +35,7 @@ function SocialButton({ icon }: { icon: string }) {
       }}
     >
       <Image
-        source={{ uri: icon }}
+        source={ICONS[icon]}
         style={styles.socialIcon}
         contentFit="contain"
       />
@@ -42,23 +48,31 @@ export default function LoginScreen() {
     key: "",
     password: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const { login, isLoading } = useAuth();
 
-  async function handleLogin(key: string, password: string) {
-    if (!key || !password) {
-      setError("Please fill in all fields");
-      return;
-    }
-
+  async function handleLogin(formData: typeof form) {
     try {
-      await login(key, password);
+      const validatedData = loginSchema.parse(formData);
+      await login(validatedData.key, validatedData.password);
     } catch (error) {
-      setError("Invalid credentials");
-      console.error("Login error:", error);
+      if (error instanceof z.ZodError) {
+        const fieldErrors: Record<string, string> = {};
+        error.errors.forEach((err) => {
+          if (err.path) {
+            fieldErrors[err.path[0]] = err.message;
+          }
+        });
+        setErrors(fieldErrors);
+      } else {
+        setError("Invalid credentials");
+        console.error("Login error:", error);
+      }
     }
   }
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -79,19 +93,27 @@ export default function LoginScreen() {
               </View>
 
               <InputField
-                icon={ICONS.user}
+                icon="profile"
                 placeholder="Email or Phone"
                 value={form.key}
-                onChangeText={(key) => setForm({ ...form, key })}
+                onChangeText={(key) => {
+                  setForm({ ...form, key });
+                  setErrors({ ...errors, key: "" });
+                }}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                error={errors.key}
               />
               <InputField
-                icon={ICONS.password}
+                icon="password"
                 placeholder="Password"
                 value={form.password}
-                onChangeText={(password) => setForm({ ...form, password })}
+                onChangeText={(password) => {
+                  setForm({ ...form, password });
+                  setErrors({ ...errors, password: "" });
+                }}
                 secureTextEntry
+                error={errors.password}
               />
 
               {error && <Text style={styles.error}>{error}</Text>}
@@ -103,7 +125,7 @@ export default function LoginScreen() {
               <Pressable
                 style={styles.button}
                 onPress={() => {
-                  handleLogin(form.key, form.password);
+                  handleLogin(form);
                 }}
               >
                 <LinearGradient
@@ -125,8 +147,8 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.socialButtons}>
-                <SocialButton icon={ICONS.google} />
-                <SocialButton icon={ICONS.facebook} />
+                <SocialButton icon="google" />
+                <SocialButton icon="facebook" />
               </View>
 
               <View style={styles.footer}>

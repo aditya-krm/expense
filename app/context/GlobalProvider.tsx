@@ -59,7 +59,7 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
         setUser(JSON.parse(storedUser));
         router.replace("/home");
       } else {
-        router.replace("/login");
+        router.replace("/");
       }
     } catch (error) {
       console.error("Error loading stored auth:", error);
@@ -166,7 +166,7 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
       await SecureStore.deleteItemAsync("userData");
       setUser(null);
       setToken(null);
-      router.replace("/login");
+      router.replace("/");
     } catch (error) {
       console.error("Logout error:", error);
       throw error;

@@ -7,7 +7,11 @@ export default function RootLayout() {
   return (
     <GlobalProvider>
       <SafeAreaProvider>
-        <StatusBar backgroundColor={"#1A1A2E"} barStyle={"light-content"} />
+        <StatusBar
+          backgroundColor={"#062a2421"}
+          translucent
+          barStyle={"light-content"}
+        />
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
