@@ -65,6 +65,7 @@ const styles = StyleSheet.create({
   container: {
     width: "100%",
     marginBottom: 10,
+    color: "#fff",
   },
   inputContainer: {
     flexDirection: "row",
@@ -85,7 +86,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: "white",
+    color: "#fff",
     fontSize: 16,
   },
   inputError: {

@@ -9,6 +9,7 @@ const theme = {
     glass: "rgba(255, 255, 255, 0.1)",
   },
   spacing: {
+    xsmall: 4,
     small: 8,
     medium: 16,
     large: 24,

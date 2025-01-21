@@ -38,7 +38,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_URL = "http://192.168.237.73:3000/api/auth";
+const API_URL = `${process.env.EXPO_PUBLIC_API_URL}/auth`;
 
 export function GlobalProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

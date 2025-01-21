@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ExpenseTracker",
-    "slug": "ExpenseTracker",
+    "name": "TrackIt - Money Tracker",
+    "slug": "MoneyMind - Fast, Robust & Unique Income, Expense, Credit Tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -20,7 +20,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",

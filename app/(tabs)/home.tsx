@@ -8,6 +8,8 @@ import { useState } from "react";
 import * as Haptics from "expo-haptics";
 import { z } from "zod";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useTransactions } from "../context/TransactionContext";
+import Spinner from "react-native-loading-spinner-overlay";
 
 const TransactionTypes = {
   INCOME: {
@@ -33,17 +35,27 @@ const TransactionTypes = {
 } as const;
 
 const transactionSchema = z.object({
-  title: z.string().min(2, "Title must be at least 2 characters"),
-  amount: z.number().positive("Amount must be positive"),
   type: z.enum(["INCOME", "EXPENSE", "CREDIT_GIVEN", "CREDIT_RECEIVED"]),
-  categoryId: z.string(),
-  description: z.string().optional(),
-  relatedTo: z.string().optional(),
-  dueDate: z.string().datetime().optional(),
+  category: z.string(),
+  amount: z
+    .number({ invalid_type_error: "Amount must be a number" })
+    .positive("Amount must be positive"),
+  date: z.coerce.date().default(() => new Date()),
+  description: z.string().min(2, "Description must be at least 2 characters"),
+  paymentMode: z.enum(["ONLINE", "CASH"]),
   recurrence: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]).optional(),
+  relatedTo: z.string().optional(),
+  isPaid: z.boolean().optional(),
 });
 
-const categories = [
+const incomeCategories = [
+  { id: "salary", label: "Salary" },
+  { id: "freelance", label: "Freelance" },
+  { id: "investment", label: "Investment" },
+  { id: "other", label: "Other" },
+];
+
+const expenseCategories = [
   { id: "food", label: "Food" },
   { id: "transport", label: "Transport" },
   { id: "utilities", label: "Utilities" },
@@ -53,14 +65,23 @@ const categories = [
 ];
 
 export default function Home() {
+  const { addTransaction, isLoading } = useTransactions();
   const [selectedType, setSelectedType] = useState<
     keyof typeof TransactionTypes | null
   >(null);
   const [formData, setFormData] = useState({
-    title: "",
     amount: "",
-    categoryId: "",
+    category: "",
     description: "",
+    paymentMode: "ONLINE" as "ONLINE" | "CASH",
+    recurrence: undefined as
+      | "DAILY"
+      | "WEEKLY"
+      | "MONTHLY"
+      | "YEARLY"
+      | undefined,
+    relatedTo: "",
+    isPaid: true,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -68,24 +89,37 @@ export default function Home() {
     Haptics.selectionAsync();
     setSelectedType(type);
     setFormData({
-      title: "",
       amount: "",
-      categoryId: "",
+      category: "",
       description: "",
+      paymentMode: "ONLINE",
+      recurrence: undefined,
+      relatedTo: "",
+      isPaid: true,
     });
     setErrors({});
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
       const validData = transactionSchema.parse({
         ...formData,
         amount: Number(formData.amount),
         type: selectedType,
+        date: new Date(),
       });
-      console.log("Valid transaction:", validData);
-      // TODO: Send to backend
+
+      await addTransaction(validData);
       setSelectedType(null);
+      setFormData({
+        amount: "",
+        category: "",
+        description: "",
+        paymentMode: "ONLINE",
+        recurrence: undefined,
+        relatedTo: "",
+        isPaid: true,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -98,6 +132,252 @@ export default function Home() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     }
+  };
+
+  const renderForm = () => {
+    const isCreditTransaction =
+      selectedType === "CREDIT_GIVEN" || selectedType === "CREDIT_RECEIVED";
+    const categories =
+      selectedType === "INCOME" ? incomeCategories : expenseCategories;
+
+    return (
+      <ScrollView style={styles.formContainer}>
+        <TextInput
+          label="Amount"
+          value={formData.amount}
+          onChangeText={(text) => setFormData({ ...formData, amount: text })}
+          keyboardType="numeric"
+          error={!!errors.amount}
+          style={styles.input}
+        />
+        {errors.amount && <Text style={styles.errorText}>{errors.amount}</Text>}
+
+        {!isCreditTransaction && (
+          <>
+            <View style={styles.categoryContainer}>
+              {categories.map((category) => (
+                <Pressable
+                  key={category.id}
+                  style={[
+                    styles.categoryChip,
+                    formData.category === category.id &&
+                      styles.selectedCategoryChip,
+                  ]}
+                  onPress={() =>
+                    setFormData({ ...formData, category: category.id })
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      formData.category === category.id &&
+                        styles.selectedCategoryChipText,
+                    ]}
+                  >
+                    {category.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {errors.category && (
+              <Text style={styles.errorText}>{errors.category}</Text>
+            )}
+          </>
+        )}
+
+        <TextInput
+          label="Description"
+          value={formData.description}
+          onChangeText={(text) =>
+            setFormData({ ...formData, description: text })
+          }
+          error={!!errors.description}
+          style={styles.input}
+        />
+        {errors.description && (
+          <Text style={styles.errorText}>{errors.description}</Text>
+        )}
+
+        <View style={styles.paymentModeContainer}>
+          <Text style={styles.label}>Payment Mode</Text>
+          <View style={styles.paymentModeButtons}>
+            <Pressable
+              style={[
+                styles.paymentModeButton,
+                formData.paymentMode === "ONLINE" && styles.selectedPaymentMode,
+              ]}
+              onPress={() =>
+                setFormData({ ...formData, paymentMode: "ONLINE" })
+              }
+            >
+              <MaterialCommunityIcons
+                name="bank"
+                size={24}
+                color={formData.paymentMode === "ONLINE" ? "white" : "black"}
+              />
+              <Text
+                style={[
+                  styles.paymentModeText,
+                  formData.paymentMode === "ONLINE" &&
+                    styles.selectedPaymentModeText,
+                ]}
+              >
+                Online
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.paymentModeButton,
+                formData.paymentMode === "CASH" && styles.selectedPaymentMode,
+              ]}
+              onPress={() => setFormData({ ...formData, paymentMode: "CASH" })}
+            >
+              <MaterialCommunityIcons
+                name="cash"
+                size={24}
+                color={formData.paymentMode === "CASH" ? "white" : "black"}
+              />
+              <Text
+                style={[
+                  styles.paymentModeText,
+                  formData.paymentMode === "CASH" &&
+                    styles.selectedPaymentModeText,
+                ]}
+              >
+                Cash
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {!isCreditTransaction && (
+          <View style={styles.recurrenceContainer}>
+            <Text style={styles.label}>Recurrence (Optional)</Text>
+            <View style={styles.recurrenceButtons}>
+              {["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].map((rec) => (
+                <Pressable
+                  key={rec}
+                  style={[
+                    styles.recurrenceButton,
+                    formData.recurrence === rec && styles.selectedRecurrence,
+                  ]}
+                  onPress={() =>
+                    setFormData({
+                      ...formData,
+                      recurrence: rec as
+                        | "DAILY"
+                        | "WEEKLY"
+                        | "MONTHLY"
+                        | "YEARLY",
+                    })
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.recurrenceText,
+                      formData.recurrence === rec &&
+                        styles.selectedRecurrenceText,
+                    ]}
+                  >
+                    {rec.charAt(0) + rec.slice(1).toLowerCase()}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {isCreditTransaction && (
+          <>
+            <TextInput
+              label="Related To"
+              value={formData.relatedTo}
+              onChangeText={(text) =>
+                setFormData({ ...formData, relatedTo: text })
+              }
+              error={!!errors.relatedTo}
+              style={styles.input}
+            />
+            {errors.relatedTo && (
+              <Text style={styles.errorText}>{errors.relatedTo}</Text>
+            )}
+
+            <View style={styles.isPaidContainer}>
+              <Text style={styles.label}>Payment Status</Text>
+              <View style={styles.isPaidButtons}>
+                <Pressable
+                  style={[
+                    styles.isPaidButton,
+                    formData.isPaid && styles.selectedIsPaid,
+                  ]}
+                  onPress={() => setFormData({ ...formData, isPaid: true })}
+                >
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={24}
+                    color={formData.isPaid ? "white" : "black"}
+                  />
+                  <Text
+                    style={[
+                      styles.isPaidText,
+                      formData.isPaid && styles.selectedIsPaidText,
+                    ]}
+                  >
+                    Paid
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.isPaidButton,
+                    !formData.isPaid && styles.selectedIsPaid,
+                  ]}
+                  onPress={() => setFormData({ ...formData, isPaid: false })}
+                >
+                  <MaterialCommunityIcons
+                    name="clock"
+                    size={24}
+                    color={!formData.isPaid ? "white" : "black"}
+                  />
+                  <Text
+                    style={[
+                      styles.isPaidText,
+                      !formData.isPaid && styles.selectedIsPaidText,
+                    ]}
+                  >
+                    Pending
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </>
+        )}
+        <View
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            gap: 10,
+            width: "100%",
+            justifyContent: "center",
+          }}
+        >
+          <Button
+            mode="outlined"
+            style={styles.cancelButton}
+            onPress={() => setSelectedType(null)}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            mode="contained"
+            onPress={handleSave}
+            style={styles.saveButton}
+          >
+            Save Transaction
+          </Button>
+        </View>
+      </ScrollView>
+    );
   };
 
   return (
@@ -195,126 +475,7 @@ export default function Home() {
               New {selectedType ? TransactionTypes[selectedType].label : ""}
             </Text>
 
-            <TextInput
-              mode="outlined"
-              label="Title"
-              value={formData.title}
-              onChangeText={(text) => {
-                setFormData({ ...formData, title: text });
-                setErrors({ ...errors, title: "" });
-              }}
-              error={!!errors.title}
-              style={styles.input}
-              theme={{
-                colors: {
-                  primary: theme.colors.highlight,
-                  error: theme.colors.error,
-                },
-              }}
-            />
-            {errors.title && (
-              <Text style={styles.errorText}>{errors.title}</Text>
-            )}
-
-            <TextInput
-              mode="outlined"
-              label="Amount"
-              value={formData.amount}
-              onChangeText={(text) => {
-                setFormData({
-                  ...formData,
-                  amount: text.replace(/[^0-9.]/g, ""),
-                });
-                setErrors({ ...errors, amount: "" });
-              }}
-              error={!!errors.amount}
-              style={styles.input}
-              keyboardType="decimal-pad"
-              theme={{
-                colors: {
-                  primary: theme.colors.highlight,
-                  error: theme.colors.error,
-                },
-              }}
-            />
-            {errors.amount && (
-              <Text style={styles.errorText}>{errors.amount}</Text>
-            )}
-
-            <View style={styles.categoryContainer}>
-              <Text style={styles.label}>Category</Text>
-              <View style={styles.categoryButtons}>
-                {categories.map((category) => (
-                  <Pressable
-                    key={category.id}
-                    onPress={() => {
-                      setFormData({ ...formData, categoryId: category.id });
-                      setErrors({ ...errors, categoryId: "" });
-                      Haptics.selectionAsync();
-                    }}
-                    style={[
-                      styles.categoryButton,
-                      formData.categoryId === category.id &&
-                        styles.categoryButtonSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryButtonText,
-                        formData.categoryId === category.id &&
-                          styles.categoryButtonTextSelected,
-                      ]}
-                    >
-                      {category.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              {errors.categoryId && (
-                <Text style={styles.errorText}>{errors.categoryId}</Text>
-              )}
-            </View>
-
-            <TextInput
-              mode="outlined"
-              label="Description (Optional)"
-              value={formData.description}
-              onChangeText={(text) =>
-                setFormData({ ...formData, description: text })
-              }
-              style={styles.input}
-              multiline
-              theme={{
-                colors: {
-                  primary: theme.colors.highlight,
-                },
-              }}
-            />
-
-            <View style={styles.buttonContainer}>
-              <Button
-                mode="outlined"
-                onPress={() => setSelectedType(null)}
-                style={styles.button}
-                textColor={theme.colors.secondary}
-              >
-                Cancel
-              </Button>
-              <Button
-                mode="contained"
-                onPress={handleSave}
-                style={[
-                  styles.button,
-                  {
-                    backgroundColor: selectedType
-                      ? TransactionTypes[selectedType].color
-                      : theme.colors.highlight,
-                  },
-                ]}
-              >
-                Save
-              </Button>
-            </View>
+            {renderForm()}
           </BlurView>
         </View>
       </Modal>
@@ -328,6 +489,7 @@ export default function Home() {
           <Text style={styles.emptyStateText}>No recent transactions</Text>
         </BlurView>
       </View>
+      <Spinner visible={isLoading} />
     </ScrollView>
   );
 }
@@ -424,8 +586,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     borderTopLeftRadius: theme.borderRadius.large,
     borderTopRightRadius: theme.borderRadius.large,
-    padding: theme.spacing.large,
+    padding: theme.spacing.small,
+    borderRadius: theme.borderRadius.large,
     maxHeight: "90%",
+    color: "#fff",
   },
   formTitle: {
     marginBottom: theme.spacing.large,
@@ -445,6 +609,10 @@ const styles = StyleSheet.create({
   },
   categoryContainer: {
     marginBottom: theme.spacing.medium,
+    display: "flex",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.small,
   },
   label: {
     color: theme.colors.primary,
@@ -472,13 +640,105 @@ const styles = StyleSheet.create({
   categoryButtonTextSelected: {
     color: theme.colors.highlight,
   },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: theme.spacing.medium,
-    marginTop: theme.spacing.large,
+  paymentModeContainer: {
+    marginBottom: theme.spacing.medium,
   },
-  button: {
-    flex: 1,
+  paymentModeButtons: {
+    flexDirection: "row",
+    gap: theme.spacing.small,
+  },
+  paymentModeButton: {
+    backgroundColor: theme.colors.glass,
+    padding: theme.spacing.medium,
+    paddingVertical: theme.spacing.small,
+    borderRadius: theme.borderRadius.medium,
+    borderWidth: 1,
+    borderColor: theme.colors.glass,
+  },
+  selectedPaymentMode: {
+    borderColor: theme.colors.highlight,
+    backgroundColor: "rgba(0,201,167,0.1)",
+  },
+  paymentModeText: {
+    color: theme.colors.secondary,
+  },
+  selectedPaymentModeText: {
+    color: theme.colors.highlight,
+  },
+  recurrenceContainer: {
+    marginBottom: theme.spacing.medium,
+  },
+  recurrenceButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.small,
+  },
+  recurrenceButton: {
+    backgroundColor: theme.colors.glass,
+    padding: theme.spacing.medium,
+    paddingVertical: theme.spacing.small,
+    borderRadius: theme.borderRadius.medium,
+    borderWidth: 1,
+    borderColor: theme.colors.glass,
+  },
+  selectedRecurrence: {
+    borderColor: theme.colors.highlight,
+    backgroundColor: "rgba(0,201,167,0.1)",
+  },
+  recurrenceText: {
+    color: theme.colors.secondary,
+  },
+  selectedRecurrenceText: {
+    color: theme.colors.highlight,
+  },
+  isPaidContainer: {
+    marginBottom: theme.spacing.medium,
+  },
+  isPaidButtons: {
+    flexDirection: "row",
+    gap: theme.spacing.small,
+  },
+  isPaidButton: {
+    backgroundColor: theme.colors.glass,
+    padding: theme.spacing.medium,
+    paddingVertical: theme.spacing.small,
+    borderRadius: theme.borderRadius.medium,
+    borderWidth: 1,
+    borderColor: theme.colors.glass,
+  },
+  selectedIsPaid: {
+    borderColor: theme.colors.highlight,
+    backgroundColor: "rgba(0,201,167,0.1)",
+  },
+  isPaidText: {
+    color: theme.colors.secondary,
+  },
+  selectedIsPaidText: {
+    color: theme.colors.highlight,
+  },
+  cancelButton: {
+    width: "48%",
+  },
+  saveButton: {
+    width: "48%",
+  },
+  categoryChip: {
+    backgroundColor: theme.colors.glass,
+    padding: theme.spacing.small,
+    paddingVertical: theme.spacing.xsmall,
+    borderRadius: theme.borderRadius.small,
+    marginRight: theme.spacing.small,
+    borderWidth: 1,
+    borderColor: theme.colors.glass,
+  },
+  selectedCategoryChip: {
+    backgroundColor: "rgba(0,201,167,0.1)",
+    borderColor: theme.colors.highlight,
+  },
+  categoryChipText: {
+    color: theme.colors.secondary,
+  },
+  selectedCategoryChipText: {
+    color: theme.colors.highlight,
   },
 });
