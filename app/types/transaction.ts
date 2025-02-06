@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const transactionSchema = z.object({
+const transactionSchema = z.object({
   type: z.enum(["INCOME", "EXPENSE", "CREDIT_GIVEN", "CREDIT_RECEIVED"]),
   category: z.string(),
   amount: z.number().positive("Amount must be positive"),
@@ -25,3 +25,5 @@ export interface TransactionStatistics {
   totalCreditReceived: number;
   netBalance: number;
 }
+
+export default transactionSchema;

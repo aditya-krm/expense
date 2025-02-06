@@ -1,14 +1,34 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Transaction, TransactionStatistics } from "../types/transaction";
+import useAuth from "./GlobalProvider";
 
-const API_URL = `http://192.168.121.73:3000/api/transactions`;
+const API_URL = `${process.env.EXPO_PUBLIC_API_URL}/transactions`;
+
+interface TransactionFilters {
+  type?: string;
+  startDate?: Date;
+  endDate?: Date;
+  category?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+interface PaginationInfo {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
 interface TransactionContextType {
   transactions: Transaction[];
   statistics: TransactionStatistics | null;
   isLoading: boolean;
   error: string | null;
-  lastFetched: Date | null;
+  filters: TransactionFilters;
+  pagination: PaginationInfo;
+  setFilters: (filters: Partial<TransactionFilters>) => void;
   addTransaction: (
     transaction: Omit<Transaction, "id" | "createdAt" | "updatedAt">
   ) => Promise<void>;
@@ -17,7 +37,7 @@ interface TransactionContextType {
     transaction: Partial<Transaction>
   ) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
-  fetchTransactions: () => Promise<void>;
+  fetchTransactions: (newFilters?: Partial<TransactionFilters>) => Promise<any>;
   fetchStatistics: () => Promise<void>;
   refreshTransactions: () => Promise<void>;
 }
@@ -26,76 +46,125 @@ const TransactionContext = createContext<TransactionContextType | undefined>(
   undefined
 );
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
 export function TransactionProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { token } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [statistics, setStatistics] = useState<TransactionStatistics | null>(
     null
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [filters, setFilters] = useState<TransactionFilters>({
+    page: 1,
+    limit: 10,
+  });
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 1,
+  });
 
-  const isCacheValid = () => {
-    if (!lastFetched) return false;
-    const now = new Date();
-    return now.getTime() - lastFetched.getTime() < CACHE_DURATION;
-  };
-
-  const fetchTransactions = async (force = false) => {
-    if (!force && isCacheValid()) return;
+  const fetchTransactions = async (newFilters?: Partial<TransactionFilters>) => {
+    if (!token) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(API_URL);
+      const currentFilters = { ...filters, ...newFilters };
+      if (newFilters) {
+        setFilters(currentFilters);
+      }
+
+      const queryParams = new URLSearchParams();
+      Object.entries(currentFilters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (key === "startDate" || key === "endDate") {
+            queryParams.append(key, (value as Date).toISOString());
+          } else {
+            queryParams.append(key, String(value));
+          }
+        }
+      });
+
+      const response = await fetch(`${API_URL}?${queryParams.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
-      setTransactions(data);
-      setLastFetched(new Date());
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch transactions"
-      );
-    } finally {
+
+      const responseData = await response.json();
+      if (!responseData.success || !responseData.data) {
+        throw new Error("Invalid data format received from API");
+      }
+
+      setTransactions(responseData.data.transactions);
+      setPagination(responseData.data.pagination);
       setIsLoading(false);
+
+      // After fetching transactions, also fetch statistics
+      await fetchStatistics();
+
+      return responseData;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+      setIsLoading(false);
+      throw err;
     }
   };
 
   const fetchStatistics = async () => {
+    if (!token) return;
+
     try {
-      const response = await fetch(`${API_URL}/statistics`);
+      const response = await fetch(`${API_URL}/statistics`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
-      setStatistics(data);
+
+      const responseData = await response.json();
+      if (!responseData.success || !responseData.data) {
+        throw new Error("Invalid statistics data format received from API");
+      }
+
+      setStatistics(responseData.data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch statistics"
-      );
+      console.error("Error fetching statistics:", err);
+      setStatistics(null);
     }
+  };
+
+  const refreshTransactions = async () => {
+    await fetchTransactions();
   };
 
   const addTransaction = async (
     transaction: Omit<Transaction, "id" | "createdAt" | "updatedAt">
   ) => {
-    console.log(transaction);
-    setIsLoading(true);
-    setError(null);
+    if (!token) return;
 
+    setIsLoading(true);
     try {
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(transaction),
@@ -105,13 +174,9 @@ export function TransactionProvider({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      setTransactions((prev) => [...prev, data]);
-      await fetchStatistics();
+      await refreshTransactions();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to add transaction"
-      );
+      setError(err instanceof Error ? err.message : "An error occurred");
       throw err;
     } finally {
       setIsLoading(false);
@@ -122,13 +187,14 @@ export function TransactionProvider({
     id: string,
     transaction: Partial<Transaction>
   ) => {
-    setIsLoading(true);
-    setError(null);
+    if (!token) return;
 
+    setIsLoading(true);
     try {
       const response = await fetch(`${API_URL}/${id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(transaction),
@@ -138,15 +204,9 @@ export function TransactionProvider({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const updatedTransaction = await response.json();
-      setTransactions((prev) =>
-        prev.map((t) => (t.id === id ? updatedTransaction : t))
-      );
-      await fetchStatistics();
+      await refreshTransactions();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update transaction"
-      );
+      setError(err instanceof Error ? err.message : "An error occurred");
       throw err;
     } finally {
       setIsLoading(false);
@@ -154,31 +214,29 @@ export function TransactionProvider({
   };
 
   const deleteTransaction = async (id: string) => {
-    setIsLoading(true);
-    setError(null);
+    if (!token) return;
 
+    setIsLoading(true);
     try {
       const response = await fetch(`${API_URL}/${id}`, {
         method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
-      await fetchStatistics();
+      await refreshTransactions();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to delete transaction"
-      );
+      setError(err instanceof Error ? err.message : "An error occurred");
       throw err;
     } finally {
       setIsLoading(false);
     }
   };
-
-  const refreshTransactions = () => fetchTransactions(true);
 
   // Initial fetch
   useEffect(() => {
@@ -191,7 +249,13 @@ export function TransactionProvider({
     statistics,
     isLoading,
     error,
-    lastFetched,
+    filters,
+    pagination,
+    setFilters: (newFilters: Partial<TransactionFilters>) => {
+      const updatedFilters = { ...filters, ...newFilters };
+      setFilters(updatedFilters);
+      fetchTransactions(updatedFilters);
+    },
     addTransaction,
     updateTransaction,
     deleteTransaction,
@@ -207,7 +271,7 @@ export function TransactionProvider({
   );
 }
 
-export function useTransactions() {
+function useTransactions() {
   const context = useContext(TransactionContext);
   if (context === undefined) {
     throw new Error(
@@ -216,3 +280,5 @@ export function useTransactions() {
   }
   return context;
 }
+
+export default useTransactions;

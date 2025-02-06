@@ -7,6 +7,7 @@ const theme = {
     highlight: "#00C9A7",
     error: "#FF6B6B",
     glass: "rgba(255, 255, 255, 0.1)",
+    surfaceVariant: "rgba(255, 255, 255, 0.05)",
   },
   spacing: {
     xsmall: 4,

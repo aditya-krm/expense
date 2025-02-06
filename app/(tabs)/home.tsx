@@ -1,15 +1,17 @@
-import { StyleSheet, View, Pressable, ScrollView, Modal } from "react-native";
-import { Text, TextInput, Button } from "react-native-paper";
+import { StyleSheet, View, Pressable, ScrollView, Modal, RefreshControl } from "react-native";
+import { Text, TextInput, Button, ActivityIndicator } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import theme from "../styles/theme";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as Haptics from "expo-haptics";
 import { z } from "zod";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTransactions } from "../context/TransactionContext";
+import  useTransactions from "../context/TransactionContext";
 import Spinner from "react-native-loading-spinner-overlay";
+import { format } from "date-fns";
+import { Transaction } from "../types/transaction";
 
 const TransactionTypes = {
   INCOME: {
@@ -65,10 +67,11 @@ const expenseCategories = [
 ];
 
 export default function Home() {
-  const { addTransaction, isLoading } = useTransactions();
+  const { addTransaction, transactions, isLoading, refreshTransactions, statistics } = useTransactions();
   const [selectedType, setSelectedType] = useState<
     keyof typeof TransactionTypes | null
   >(null);
+  const [transactionError, setTransactionError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     amount: "",
     category: "",
@@ -84,6 +87,20 @@ export default function Home() {
     isPaid: true,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    refreshTransactions();
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshTransactions();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshTransactions]);
 
   const handleTypeSelect = (type: keyof typeof TransactionTypes) => {
     Haptics.selectionAsync();
@@ -380,117 +397,236 @@ export default function Home() {
     );
   };
 
-  return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header Section */}
-      <Animated.View entering={FadeIn} style={styles.header}>
-        <LinearGradient
-          colors={["rgba(0,201,167,0.2)", "transparent"]}
-          style={styles.headerGradient}
-        >
-          <Text variant="headlineMedium" style={styles.headerTitle}>
-            TrackIt
-          </Text>
-          <Text variant="bodyMedium" style={styles.headerSubtitle}>
-            Your Financial Journey
-          </Text>
-        </LinearGradient>
-      </Animated.View>
+  const renderTransaction = (transaction: Transaction) => {
+    const transactionType = transaction.type as keyof typeof TransactionTypes;
+    const typeData = TransactionTypes[transactionType];
 
-      {/* Overview Cards */}
-      <View style={styles.overviewContainer}>
-        {Object.entries(TransactionTypes).map(([type, data], index) => (
+    return (
+      <Animated.View
+        key={transaction.id}
+        entering={FadeInDown.delay(200)}
+        style={styles.transactionCard}
+      >
+        <View style={[styles.transactionIcon, { backgroundColor: typeData.color }]}>
+          <MaterialCommunityIcons
+            name={typeData.icon}
+            size={24}
+            color="white"
+          />
+        </View>
+        <View style={styles.transactionDetails}>
+          <Text style={styles.description}>{transaction.description}</Text>
+          <Text style={styles.transactionMeta}>
+            {format(new Date(transaction.date), "MMM dd, yyyy")} • {transaction.paymentMode}
+            {transaction.relatedTo && ` • ${transaction.relatedTo}`}
+          </Text>
+        </View>
+        <Text
+          style={[
+            styles.amount,
+            { color: typeData.color },
+          ]}
+        >
+          {transaction.type === "EXPENSE" ? "-" : "+"}₹{Math.abs(transaction.amount).toFixed(2)}
+        </Text>
+      </Animated.View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Header Section */}
+        <Animated.View entering={FadeIn} style={styles.header}>
+          <LinearGradient
+            colors={["rgba(0,201,167,0.2)", "transparent"]}
+            style={styles.headerGradient}
+          >
+            <Text variant="headlineMedium" style={styles.headerTitle}>
+              TrackIt
+            </Text>
+            <Text variant="bodyMedium" style={styles.headerSubtitle}>
+              Your Financial Journey
+            </Text>
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Overview Cards */}
+        <View style={styles.overviewContainer}>
           <Animated.View
-            key={type}
-            entering={FadeInDown.delay(index * 100)}
-            style={[styles.overviewCard, { borderColor: data.color }]}
+            entering={FadeInDown.delay(0)}
+            style={[styles.overviewCard, { borderColor: TransactionTypes.INCOME.color }]}
           >
             <BlurView intensity={20} style={styles.cardBlur}>
               <Text
                 variant="titleMedium"
-                style={[styles.cardTitle, { color: data.color }]}
+                style={[styles.cardTitle, { color: TransactionTypes.INCOME.color }]}
               >
-                {data.label}
+                {TransactionTypes.INCOME.label}
                 <MaterialCommunityIcons
-                  name={data.icon}
+                  name={TransactionTypes.INCOME.icon}
                   size={24}
-                  color={data.color}
+                  color={TransactionTypes.INCOME.color}
                 />
               </Text>
               <Text variant="headlineSmall" style={styles.cardAmount}>
-                ₹0.00
+                ₹{statistics?.totalIncome?.toLocaleString() ?? '0.00'}
               </Text>
             </BlurView>
           </Animated.View>
-        ))}
-      </View>
 
-      {/* Quick Add Section */}
-      <View style={styles.quickAddSection}>
-        <Text variant="titleMedium" style={styles.sectionTitle}>
-          Quick Add
-        </Text>
-        <View style={styles.typeButtons}>
-          {Object.entries(TransactionTypes).map(([type, data]) => (
-            <Pressable
-              key={type}
-              onPress={() =>
-                handleTypeSelect(type as keyof typeof TransactionTypes)
-              }
-              style={[
-                styles.typeButton,
-                selectedType === type && { borderColor: data.color },
-              ]}
-            >
-              <BlurView intensity={20} style={styles.typeButtonContent}>
-                <Text style={[styles.typeButtonText, { color: data.color }]}>
-                  {data.label}
-                </Text>
-              </BlurView>
-            </Pressable>
-          ))}
+          <Animated.View
+            entering={FadeInDown.delay(100)}
+            style={[styles.overviewCard, { borderColor: TransactionTypes.EXPENSE.color }]}
+          >
+            <BlurView intensity={20} style={styles.cardBlur}>
+              <Text
+                variant="titleMedium"
+                style={[styles.cardTitle, { color: TransactionTypes.EXPENSE.color }]}
+              >
+                {TransactionTypes.EXPENSE.label}
+                <MaterialCommunityIcons
+                  name={TransactionTypes.EXPENSE.icon}
+                  size={24}
+                  color={TransactionTypes.EXPENSE.color}
+                />
+              </Text>
+              <Text variant="headlineSmall" style={styles.cardAmount}>
+                ₹{statistics?.totalExpense?.toLocaleString() ?? '0.00'}
+              </Text>
+            </BlurView>
+          </Animated.View>
+
+          <Animated.View
+            entering={FadeInDown.delay(200)}
+            style={[styles.overviewCard, { borderColor: TransactionTypes.CREDIT_GIVEN.color }]}
+          >
+            <BlurView intensity={20} style={styles.cardBlur}>
+              <Text
+                variant="titleMedium"
+                style={[styles.cardTitle, { color: TransactionTypes.CREDIT_GIVEN.color }]}
+              >
+                {TransactionTypes.CREDIT_GIVEN.label}
+                <MaterialCommunityIcons
+                  name={TransactionTypes.CREDIT_GIVEN.icon}
+                  size={24}
+                  color={TransactionTypes.CREDIT_GIVEN.color}
+                />
+              </Text>
+              <Text variant="headlineSmall" style={styles.cardAmount}>
+                ₹{statistics?.totalCreditGiven?.toLocaleString() ?? '0.00'}
+              </Text>
+            </BlurView>
+          </Animated.View>
+
+          <Animated.View
+            entering={FadeInDown.delay(300)}
+            style={[styles.overviewCard, { borderColor: TransactionTypes.CREDIT_RECEIVED.color }]}
+          >
+            <BlurView intensity={20} style={styles.cardBlur}>
+              <Text
+                variant="titleMedium"
+                style={[styles.cardTitle, { color: TransactionTypes.CREDIT_RECEIVED.color }]}
+              >
+                {TransactionTypes.CREDIT_RECEIVED.label}
+                <MaterialCommunityIcons
+                  name={TransactionTypes.CREDIT_RECEIVED.icon}
+                  size={24}
+                  color={TransactionTypes.CREDIT_RECEIVED.color}
+                />
+              </Text>
+              <Text variant="headlineSmall" style={styles.cardAmount}>
+                ₹{statistics?.totalCreditReceived?.toLocaleString() ?? '0.00'}
+              </Text>
+            </BlurView>
+          </Animated.View>
         </View>
-      </View>
 
-      {/* Transaction Form Modal */}
-      <Modal
-        visible={selectedType !== null}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setSelectedType(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <BlurView intensity={20} style={styles.formContainer}>
-            <Text
-              variant="titleLarge"
-              style={[
-                styles.formTitle,
-                {
-                  color: selectedType
-                    ? TransactionTypes[selectedType].color
-                    : theme.colors.primary,
-                },
-              ]}
-            >
-              New {selectedType ? TransactionTypes[selectedType].label : ""}
-            </Text>
-
-            {renderForm()}
-          </BlurView>
+        {/* Quick Add Section */}
+        <View style={styles.quickAddSection}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Quick Add
+          </Text>
+          <View style={styles.typeButtons}>
+            {Object.entries(TransactionTypes).map(([type, data]) => (
+              <Pressable
+                key={type}
+                onPress={() =>
+                  handleTypeSelect(type as keyof typeof TransactionTypes)
+                }
+                style={[
+                  styles.typeButton,
+                  selectedType === type && { borderColor: data.color },
+                ]}
+              >
+                <BlurView intensity={20} style={styles.typeButtonContent}>
+                  <Text style={[styles.typeButtonText, { color: data.color }]}>
+                    {data.label}
+                  </Text>
+                </BlurView>
+              </Pressable>
+            ))}
+          </View>
         </View>
-      </Modal>
 
-      {/* Recent Transactions */}
-      <View style={styles.recentTransactions}>
-        <Text variant="titleMedium" style={styles.sectionTitle}>
-          Recent Transactions
-        </Text>
-        <BlurView intensity={20} style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No recent transactions</Text>
-        </BlurView>
-      </View>
-      <Spinner visible={isLoading} />
-    </ScrollView>
+        {/* Transaction Form Modal */}
+        <Modal
+          visible={selectedType !== null}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setSelectedType(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <BlurView intensity={20} style={styles.formContainer}>
+              <Text
+                variant="titleLarge"
+                style={[
+                  styles.formTitle,
+                  {
+                    color: selectedType
+                      ? TransactionTypes[selectedType].color
+                      : theme.colors.primary,
+                  },
+                ]}
+              >
+                New {selectedType ? TransactionTypes[selectedType].label : ""}
+              </Text>
+
+              {renderForm()}
+            </BlurView>
+          </View>
+        </Modal>
+
+        {/* Recent Transactions Section */}
+        <View style={styles.recentTransactionsContainer}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Recent Transactions
+          </Text>
+          {isLoading ? (
+            <View style={styles.centerContent}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+          ) : transactionError ? (
+            <View style={styles.centerContent}>
+              <Text style={styles.errorText}>{transactionError}</Text>
+            </View>
+          ) : transactions.length === 0 ? (
+            <View style={styles.centerContent}>
+              <Text style={styles.emptyText}>No transactions found</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.transactionsList}>
+              {transactions.map((transaction) => renderTransaction(transaction))}
+            </ScrollView>
+          )}
+        </View>
+        <Spinner visible={isLoading} />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -565,17 +701,52 @@ const styles = StyleSheet.create({
   typeButtonText: {
     fontSize: 16,
   },
-  recentTransactions: {
-    padding: theme.spacing.medium,
-    marginBottom: theme.spacing.xlarge,
+  recentTransactionsContainer: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    marginTop: 16,
   },
-  emptyState: {
-    padding: theme.spacing.large,
-    borderRadius: theme.borderRadius.medium,
+  transactionsList: {
+    flex: 1,
+  },
+  transactionCard: {
+    flexDirection: "row",
     alignItems: "center",
+    backgroundColor: theme.colors.surfaceVariant,
+    padding: theme.spacing.medium,
+    borderRadius: theme.borderRadius.medium,
+    marginBottom: theme.spacing.small,
+    borderWidth: 1,
+    borderColor: theme.colors.glass,
   },
-  emptyStateText: {
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: theme.spacing.medium,
+    color: theme.colors.primary,
+  },
+  transactionDetails: {
+    flex: 1,
+  },
+  transactionMeta: {
+    fontSize: 12,
     color: theme.colors.secondary,
+    marginTop: 4,
+  },
+  amount: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  description: {
+    fontSize: 16,
+    color: theme.colors.primary,
+    fontWeight: "500",
   },
   modalOverlay: {
     flex: 1,
@@ -589,7 +760,12 @@ const styles = StyleSheet.create({
     padding: theme.spacing.small,
     borderRadius: theme.borderRadius.large,
     maxHeight: "90%",
-    color: "#fff",
+  },
+  modalContainer: {
+    margin: theme.spacing.medium,
+    borderRadius: theme.borderRadius.medium,
+    overflow: "hidden",
+    backgroundColor: theme.colors.surfaceVariant,
   },
   formTitle: {
     marginBottom: theme.spacing.large,
@@ -741,4 +917,14 @@ const styles = StyleSheet.create({
   selectedCategoryChipText: {
     color: theme.colors.highlight,
   },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  emptyText: {
+    color: theme.colors.surfaceVariant,
+    textAlign: "center",
+  }
 });

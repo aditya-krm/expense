@@ -6,13 +6,15 @@ import {
   Dimensions,
   Animated,
   ScrollView,
+  RefreshControl,
 } from "react-native";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import theme from "../styles/theme";
 
 import useAuth from "../context/GlobalProvider";
+import useTransactions from "../context/TransactionContext";
 
 const { width } = Dimensions.get("window");
 
@@ -38,7 +40,9 @@ interface User {
 
 const Profile = () => {
   const { user, logout } = useAuth();
+  const { statistics, refreshTransactions } = useTransactions();
   const [userData, setUserData] = useState<User | any>(user);
+  const [refreshing, setRefreshing] = useState(false);
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -57,6 +61,19 @@ const Profile = () => {
       ])
     ).start();
   }, []);
+
+  useEffect(() => {
+    refreshTransactions();
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshTransactions();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshTransactions]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -130,7 +147,12 @@ const Profile = () => {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <LinearGradient
         colors={[theme.colors.background, "#1a0033"]}
         style={styles.gradientBg}
@@ -160,10 +182,13 @@ const Profile = () => {
           <Text style={styles.profession}>{userData?.profession}</Text>
         </View>
 
-        <View style={styles.statsContainer}>
-          <StatCard title="Transactions" value={39} />
-          <StatCard title="Saved" value={`₹${35262}`} />
-          <StatCard title="Monthly Avg" value={`₹${29262}`} />
+        <View style={styles.statsGrid}>
+          <StatCard title="Balance" value={statistics?.netBalance ?? 0} />
+          <StatCard title="Total Income" value={statistics?.totalIncome ?? 0} />
+          <StatCard title="Total Expense" value={statistics?.totalExpense ?? 0} />
+          <StatCard title="Net Credit" value={(statistics?.totalCreditReceived ?? 0) - (statistics?.totalCreditGiven ?? 0)} />
+          <StatCard title="Credit Given" value={statistics?.totalCreditGiven ?? 0} />
+          <StatCard title="Credit Received" value={statistics?.totalCreditReceived ?? 0} />
         </View>
 
         <View style={styles.sectionTitle}>
@@ -219,6 +244,9 @@ const Profile = () => {
         </View>
 
         <View style={styles.buttonContainer}>
+          <Text style={{ color: theme.colors.secondary, fontSize: 12, alignSelf: "center" }}>
+            Made by Aditya with ❤️
+          </Text>
           <TouchableOpacity style={styles.editButton}>
             <LinearGradient
               colors={[theme.colors.highlight, "#00ccff"]}
@@ -326,6 +354,16 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: 18,
     fontWeight: "600",
+  },
+  section: {
+    marginVertical: 20,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 12,
   },
   detailsContainer: {
     marginTop: 10,
