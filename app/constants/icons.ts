@@ -13,6 +13,8 @@ const ICONS = {
   trash: require("../../assets/icons/trash.png"),
   facebook: require("../../assets/icons/facebook.png"),
   google: require("../../assets/icons/google.png"),
+  cash: require("../../assets/icons/cash.png"),
+  description: require("../../assets/icons/description.png"),
 };
 
 export default ICONS;

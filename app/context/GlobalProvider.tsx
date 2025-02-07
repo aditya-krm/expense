@@ -81,7 +81,6 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
   async function login(key: string, password: string) {
     try {
       setIsLoading(true);
-      console.log("Attempting login with:", { key, password });
 
       const response = await fetch(`${API_URL}/login`, {
         method: "POST",
@@ -96,7 +95,6 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
       });
 
       const data = await response.json();
-      console.log("Login response:", data);
 
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Login failed");

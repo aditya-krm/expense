@@ -13,8 +13,8 @@ interface RadioOption {
 
 interface RadioGroupProps {
   options: RadioOption[];
-  value: string;
-  onChange: (value: string) => void;
+  value: string | null;
+  onChange: (value: string | null) => void;
   error?: string;
 }
 
@@ -30,7 +30,7 @@ export default function RadioGroup({ options, value, onChange, error }: RadioGro
               value === option.value && styles.selectedOption,
               option.color && { borderColor: option.color }
             ]}
-            onPress={() => onChange(option.value)}
+            onPress={() => onChange(value === option.value ? null : option.value)}
           >
             {option.icon && (
               <MaterialCommunityIcons

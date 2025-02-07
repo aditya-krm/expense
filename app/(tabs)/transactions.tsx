@@ -1,40 +1,20 @@
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Platform, RefreshControl } from "react-native";
 import React, { useCallback, useState } from "react";
 import useTransactions from "../context/TransactionContext";
-import { Transaction } from "../types/transaction";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Transaction, TransactionFormData } from "../types/transaction";
+import { Ionicons } from "@expo/vector-icons";
 import { format } from "date-fns";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
-import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import theme from "../styles/theme";
 import Spinner from "react-native-loading-spinner-overlay";
 import TransactionMenu from "../components/TransactionMenu";
-
-const TransactionTypes = {
-  INCOME: {
-    label: "Income",
-    color: theme.colors.highlight,
-    icon: "trending-up",
-  },
-  EXPENSE: {
-    label: "Expense",
-    color: theme.colors.error,
-    icon: "trending-down",
-  },
-  CREDIT_GIVEN: {
-    label: "Credit Given",
-    color: "#9C27B0",
-    icon: "account-arrow-right",
-  },
-  CREDIT_RECEIVED: {
-    label: "Credit Received",
-    color: "#2196F3",
-    icon: "account-arrow-left",
-  },
-} as const;
+import TransactionCard from "../components/TransactionCard";
+import TransactionFormModal from "../components/TransactionFormModal";
+import { TransactionType } from "../components/renderForm";
 
 const Transactions = () => {
   const {
@@ -44,9 +24,7 @@ const Transactions = () => {
     filters,
     pagination,
     setFilters,
-    fetchTransactions,
     refreshTransactions,
-    updateTransaction,
     deleteTransaction,
   } = useTransactions();
 
@@ -59,6 +37,8 @@ const Transactions = () => {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | undefined>();
+  const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('EXPENSE');
 
   // Get unique categories from transactions
   const categories = [...new Set(transactions.map((t) => t.category))];
@@ -150,46 +130,22 @@ const Transactions = () => {
     }
   };
 
-  const renderTransaction = (transaction: Transaction) => {
-    const transactionType = transaction.type as keyof typeof TransactionTypes;
-    const typeData = TransactionTypes[transactionType];
-
-    return (
-      <TouchableOpacity
-        key={transaction.id}
-        onLongPress={(event) => handleLongPress(transaction, event)}
-        delayLongPress={500}
-      >
-        <Animated.View
-          entering={FadeInDown.delay(200)}
-          style={styles.transactionCard}
-        >
-          <View style={[styles.transactionIcon, { backgroundColor: typeData.color }]}>
-            <MaterialCommunityIcons
-              name={typeData.icon}
-              size={24}
-              color="white"
-            />
-          </View>
-          <View style={styles.transactionDetails}>
-            <Text style={styles.description}>{transaction.description}</Text>
-            <Text style={styles.transactionMeta}>
-              {format(new Date(transaction.date), "MMM dd, yyyy")} • {transaction.paymentMode}
-              {transaction.relatedTo && ` • ${transaction.relatedTo}`}
-            </Text>
-          </View>
-          <Text
-            style={[
-              styles.amount,
-              { color: typeData.color },
-            ]}
-          >
-            {transaction.type === "EXPENSE" ? "-" : "+"}₹{Math.abs(transaction.amount).toFixed(2)}
-          </Text>
-        </Animated.View>
-      </TouchableOpacity>
-    );
+  const handleSubmitTransaction = async (data: TransactionFormData) => {
+    try {
+      // Add your logic to save the transaction
+      setShowTransactionForm(false);
+    } catch (error) {
+      console.error('Failed to add transaction:', error);
+    }
   };
+
+  const renderTransaction = (transaction: Transaction) => (
+    <TransactionCard
+      key={transaction.id}
+      transaction={transaction}
+      onLongPress={handleLongPress}
+    />
+  );
 
   return (
     <View style={styles.container}>
@@ -245,7 +201,8 @@ const Transactions = () => {
                 ))}
               </Picker>
             </View>
-
+            
+            {/* date picker //TODO: implement */}
             <View style={styles.dateContainer}>
               <TouchableOpacity
                 style={styles.dateButton}
@@ -350,6 +307,14 @@ const Transactions = () => {
         onEdit={handleEdit}
         onDelete={handleDelete}
         position={menuPosition}
+      />
+
+      {/* Transaction Form Modal */}
+      <TransactionFormModal
+        isVisible={showTransactionForm}
+        onClose={() => setShowTransactionForm(false)}
+        type={selectedTransactionType}
+        onSubmit={handleSubmitTransaction}
       />
     </View>
   );
